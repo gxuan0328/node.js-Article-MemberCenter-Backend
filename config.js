@@ -9,11 +9,6 @@ const config = {
       enableArithAbort: true,
       trustServerCertificate: true,
     },
-  //   pool: {
-  //     max: 20,
-  //     min: 10,
-  //     idleTimeoutMillis: 30000
-  // }
 };
 
 const port = 5000;

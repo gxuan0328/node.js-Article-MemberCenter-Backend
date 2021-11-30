@@ -10,20 +10,20 @@ const connection = pool.connect();
 
 const authenticateToken = async (req, res, next) => {
     try {
+        
         const token = req.headers.authorization;
         if (token === undefined) {
             res.send({ StatusCode: status.PreconditionFailed, Message: 'Precondition Failed', Data: null });
         }
-        jwt.verify(token, key, async (err, decode) => {
-            if (err) {
-                console.log(err);
+        jwt.verify(token, key, async (error, decode) => {
+            if (error) {
+                console.log(error);
                 res.send({ StatusCode: status.Unauthorized, Message: 'Unauthorized', Data: null });
             }
             else {
                 await connection;
                 const data = await pool.query(`select [Token] from [ArticleDB].[dbo].[Token] where [User_Id]=${decode.Id}`);
-                if (data.recordset.length === 1 && data.recordset[0].Token === token) {
-                    console.log('decode: ', decode);
+                if ((data.recordset.length === 1) && (data.recordset[0].Token === token)) {
                     req.params.token = decode;
                 }
                 else {
@@ -82,21 +82,20 @@ app.get('/list', async (req, res) => {
         let list = [];
         let articles = [];
         if(req.query.list !== undefined){
-            if(typeof req.query.list === 'string'){
+            if((typeof req.query.list) === 'string'){
                 list.push(Number(req.query.list));
             }
             else{
                 req.query.list.forEach((index) => list.push(Number(index)));
             }
             for (let id of list) {
-                const data = await pool.query(`select [Articles].[Id], [User].[UserName], [Articles].[Title], [Articles].[CreateDatetime] from [ArticleDB].[dbo].[Articles] inner join [ArticleDB].[dbo].[User] on [Articles].[User_Id]=[User].[Id] where [Articles].[Id] = ${id}`);
+                const data = await pool.query(`select [Articles].[Id], [User].[Name], [Articles].[Title], [Articles].[CreateDatetime] from [ArticleDB].[dbo].[Articles] inner join [ArticleDB].[dbo].[User] on [Articles].[User_Id]=[User].[Id] where [Articles].[Id] = ${id}`);
                 if (data.recordset.length === 1) {
                     articles.push(data.recordset[0]);
                 }
                 else {
                     res.send({ StatusCode: status.NotFound, Message: 'Not Found', Data: null });
                 }
-
             }
             res.send({ StatusCode: status.OK, Message: 'OK', Data: articles });
         }
@@ -114,7 +113,7 @@ app.get('/detail/:id', async (req, res) => {
     try {
         await connection;
         const id = req.params.id;
-        const data = await pool.query(`select [Articles].[Id], [Articles].[Title], [Articles].[User_Id], [User].[UserName], [Articles].[Content], [Articles].[CreateDatetime], [Articles].[UpdateDatetime], [Articles].[LastOrder] from [ArticleDB].[dbo].[Articles] inner join [ArticleDB].[dbo].[User] on [Articles].[User_Id]=[User].[Id] where [Articles].[Id]=${id}`);
+        const data = await pool.query(`select [Articles].[Id], [Articles].[Title], [Articles].[User_Id], [User].[Name], [Articles].[Content], [Articles].[CreateDatetime], [Articles].[UpdateDatetime], [Articles].[Editor] from [ArticleDB].[dbo].[Articles] inner join [ArticleDB].[dbo].[User] on [Articles].[User_Id]=[User].[Id] where [Articles].[Id]=${id}`);
         if (data.recordset.length === 1) {
             res.send({ StatusCode: status.OK, Message: 'OK', Data: data.recordset[0] });
         }
@@ -136,9 +135,9 @@ app.put('/detail/:id', authenticateToken, async (req, res) => {
         const id = Number(req.params.id);
         if (id === article.Id) {
             const data = await pool.query(`select [Id] from [ArticleDB].[dbo].[Articles] where [Id]=${id} and [User_Id]=${token.Id}`);
-            if (data.recordset.length === 1 || token.UserStatus === 2) {
-                if (article.Title !== '' && article.Content !== '') {
-                    await pool.query(`update [ArticleDB].[dbo].[Articles] set [Title]='${article.Title}', [Content]='${article.Content}', [UpdateDatetime]=GETDATE(), [LastOrder]='${token.Id}' where [Id]=${article.Id}`);
+            if ((data.recordset.length === 1) || (token.Status === 2)) {
+                if ((article.Title !== '') && (article.Content !== '')) {
+                    await pool.query(`update [ArticleDB].[dbo].[Articles] set [Title]='${article.Title}', [Content]='${article.Content}', [UpdateDatetime]=GETUTCDATE(), [Editor]='${token.Id}' where [Id]=${article.Id}`);
                     res.send({ StatusCode: status.OK, Message: 'OK', Data: null });
                 }
                 else {
@@ -146,7 +145,6 @@ app.put('/detail/:id', authenticateToken, async (req, res) => {
                 }
             }
             else {
-                console.log('do not have authority');
                 res.send({ StatusCode: status.Forbidden, Message: 'Forbidden', Data: null });
             }
         }
@@ -166,7 +164,7 @@ app.delete('/:id', authenticateToken, async (req, res) => {
         const id = req.params.id;
         const token = req.params.token;
         const data = await pool.query(`select [Id] from [ArticleDB].[dbo].[Articles] where [Id]=${id} and [User_Id]=${token.Id}`);
-        if (data.recordset.length === 1 || token.UserStatus === 2) {
+        if ((data.recordset.length === 1) || (token.Status === 2)) {
             const check = await pool.query(`delete [ArticleDB].[dbo].[Articles] where [Id]=${id}`);
             if (check.rowsAffected[0] === 1) {
                 res.send({ StatusCode: status.OK, Message: 'OK', Data: null });
@@ -176,7 +174,6 @@ app.delete('/:id', authenticateToken, async (req, res) => {
             }
         }
         else {
-            console.log('do not have authority');
             res.send({ StatusCode: status.Forbidden, Message: 'Forbidden', Data: null });
         }
     }
@@ -191,7 +188,7 @@ app.post('/article', authenticateToken, async (req, res) => {
         await connection;
         const article = req.body;
         if ((req.body !== undefined) && (article.Title !== '') && (article.User_Id !== 0) && (article.Content !== '')) {
-            data = await pool.query(`insert into [ArticleDB].[dbo].[Articles] ([Title], [User_Id], [Content], [LastOrder]) values ('${article.Title}', '${article.User_Id}', '${article.Content}', '${article.User_Id}')`);
+            data = await pool.query(`insert into [ArticleDB].[dbo].[Articles] ([Title], [User_Id], [Content], [Editor]) values ('${article.Title}', '${article.User_Id}', '${article.Content}', '${article.User_Id}')`);
             res.send({ StatusCode: status.OK, Message: 'OK', Data: null });
         }
         else {
@@ -215,13 +212,13 @@ app.get('/search', async (req, res) => {
 
         title !== '' ? option.push(`[Title] like '%${title}%'`) : title;
         if (author !== '') {
-            const data = await pool.query(`select [User].[Id] from [ArticleDB].[dbo].[User] where [User].[UserName]='${author}'`);
+            const data = await pool.query(`select [User].[Id] from [ArticleDB].[dbo].[User] where [User].[Name]='${author}'`);
             if (data.recordset.length === 1) {
                 name = true;
                 option.push(`[User_Id] = ${data.recordset[0].Id}`);
             }
         }
-        if(fromDate !== '' || toDate !== ''){
+        if((fromDate !== '') || (toDate !== '')){
             fromDate !== '' ? option.push(`[CreateDatetime] >= '${fromDate}'`) : fromDate;
             toDate !== '' ? option.push(`[CreateDatetime] <= '${toDate}'`) : toDate;
         }
@@ -276,10 +273,10 @@ app.post('/login', async (req, res) => {
         const username = req.body.UserName;
         const password = req.body.Password;
         if ((req.body !== undefined) && (username !== '') && (password !== '')) {
-            const data = await pool.query(`select [Id], [UserName], [UserStatus] from [ArticleDB].[dbo].[User] where [UserName]='${username}' and Password='${password}'`);
+            const data = await pool.query(`select [Id], [Name], [Status] from [ArticleDB].[dbo].[User] where [Name]='${username}' and [Password]='${password}'`);
             if (data.recordset.length === 1) {
                 const token = jwt.sign(data.recordset[0], key, { expiresIn: '1h' });
-                await pool.query(`update [ArticleDB].[dbo].[Token] set [Token]='${token}', [UpdateDatetime]=GETDATE() where [User_Id]='${data.recordset[0].Id}'`);
+                await pool.query(`update [ArticleDB].[dbo].[Token] set [Token]='${token}', [UpdateDatetime]=GETUTCDATE() where [User_Id]='${data.recordset[0].Id}'`);
                 res.send({ StatusCode: status.OK, Message: 'OK', Data: token });
             }
             else {
@@ -301,12 +298,12 @@ app.post('/sign', async (req, res) => {
         const username = req.body.UserName;
         const password = req.body.Password;
         if ((req.body !== undefined) && (username !== '') && (password !== '')) {
-            const data = await pool.query(`select [Id] from [ArticleDB].[dbo].[User] where [UserName]='${username}'`);
+            const data = await pool.query(`select [Id] from [ArticleDB].[dbo].[User] where [Name]='${username}'`);
             if (data.recordset.length === 1) {
                 res.send({ StatusCode: status.NotFound, Message: 'Not Found', Data: null });
             }
             else {
-                const user = await pool.query(`insert into [ArticleDB].[dbo].[User] ([UserName], [Password], [UserStatus]) values('${username}', '${password}', '1') select SCOPE_IDENTITY() as Id`);
+                const user = await pool.query(`insert into [ArticleDB].[dbo].[User] ([Name], [Password], [Status]) values('${username}', '${password}', '1') select SCOPE_IDENTITY() as Id`);
                 if (user.recordset.length === 1) {
                     await pool.query(`insert into [ArticleDB].[dbo].[Token] ([User_Id], [Token]) values('${user.recordset[0].Id}', '')`);
                     res.send({ StatusCode: status.OK, Message: 'OK', Data: null });
